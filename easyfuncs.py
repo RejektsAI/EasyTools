@@ -17,8 +17,15 @@ class CachedModels:
             self.cached_data.to_csv("spreadsheet.csv", index=False)
         # Cache model urls        
         self.models = {}
-        for url, filename in zip(self.cached_data['URL'], self.cached_data['Filename']):
-            self.models[filename] = url
+        for _, row in self.cached_data.iterrows():
+            filename = row['Filename']
+            url = None
+            for value in row.values:
+                if isinstance(value, str) and "huggingface" in value:
+                    url = value
+                    break
+            if url:
+                self.models[filename] = url
     # Get cached model urls    
     def get_models(self):
         return self.models
