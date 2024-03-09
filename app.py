@@ -32,11 +32,19 @@ with gr.Blocks(title="🔊",theme=gr.themes.Base(primary_hue="rose",neutral_hue=
                     with gr.Row():
                         record_button=gr.Audio(source="microphone", label="OR Record audio.", type="filepath")
                     with gr.Row():
+                        paths_for_files = lambda path:[os.path.abspath(os.path.join(path, f)) for f in os.listdir(path) if os.path.splitext(f)[1].lower() in ('.mp3', '.wav', '.flac', '.ogg')]
                         input_audio0 = gr.Dropdown(
                             label="Input Path",
-                            value=sorted(os.listdir("audios"))[0] if len(sorted(os.listdir("audios"))) > 0 else '',
-                            choices=sorted(os.listdir("audios")),
+                            value=paths_for_files('audios')[0] if len(paths_for_files('audios')) > 0 else '',
+                            choices=paths_for_files('audios'), # Only show absolute paths for audio files ending in .mp3, .wav, .flac or .ogg
                             allow_custom_value=True
+                        )
+                    with gr.Row():
+                        audio_player = gr.Audio()
+                        input_audio0.change(
+                            inputs=[input_audio0],
+                            outputs=[audio_player],
+                            fn=lambda path: {"value":path,"__type__":"update"} if os.path.exists(path) else None
                         )
                         record_button.stop_recording(
                             fn=lambda audio:audio, #TODO save wav lambda
@@ -107,7 +115,7 @@ with gr.Blocks(title="🔊",theme=gr.themes.Base(primary_hue="rose",neutral_hue=
                     file_index1 = gr.Textbox(
                         label="Index Path",
                         interactive=True,
-                        visible=False
+                        visible=False#Not used here
                     )
                     refresh_button.click(
                         fn=change_choices,
@@ -116,7 +124,14 @@ with gr.Blocks(title="🔊",theme=gr.themes.Base(primary_hue="rose",neutral_hue=
                         api_name="infer_refresh",
                     )
                     refresh_button.click(
-                        fn=lambda: sorted([f for f in os.listdir('audios') if f.endswith(('.wav', '.mp3', '.ogg', '.flac'))]) #TODO check if properly returns a sorted list of audio files in the 'audios' folder that have the extensions '.wav', '.mp3', '.ogg', or '.flac'
+                        fn=lambda:{"choices":paths_for_files('audios'),"__type__":"update"}, #TODO check if properly returns a sorted list of audio files in the 'audios' folder that have the extensions '.wav', '.mp3', '.ogg', or '.flac'
+                        inputs=[],
+                        outputs = [input_audio0],   
+                    )
+                    refresh_button.click(
+                        fn=lambda:{"value":paths_for_files('audios')[0],"__type__":"update"} if len(paths_for_files('audios')) > 0 else {"value":"","__type__":"update"}, #TODO check if properly returns a sorted list of audio files in the 'audios' folder that have the extensions '.wav', '.mp3', '.ogg', or '.flac'
+                        inputs=[],
+                        outputs = [input_audio0],   
                     )
             with gr.Row():
                 f0_file = gr.File(label="F0 Path", visible=False)
@@ -304,18 +319,19 @@ with gr.Blocks(title="🔊",theme=gr.themes.Base(primary_hue="rose",neutral_hue=
                             interactive=True,
                         )
                         with gr.Accordion(label="Change pretrains", open=False):
+                            pretrained = lambda sr, letter: [os.path.abspath(os.path.join('assets/pretrained_v2', file)) for file in os.listdir('assets/pretrained_v2') if file.endswith('.pth') and sr in file and letter in file]
                             pretrained_G14 = gr.Dropdown(
                                 label="pretrained G",
                                 # Get a list of all pretrained G model files in assets/pretrained_v2 that end with .pth
-                                choices = [f for f in os.listdir('assets/pretrained_v2') if 'G' in f and f.endswith('.pth')],
-                                value= [f for f in os.listdir('assets/pretrained_v2') if 'G' in f and f.endswith('.pth')][0] if len([f for f in os.listdir('assets/pretrained_v2') if 'G' in f and f.endswith('.pth')]) > 0 else '',
+                                choices = pretrained(sr2.value, 'G'),
+                                value=pretrained(sr2.value, 'G')[0] if len(pretrained(sr2.value, 'G')) > 0 else '',
                                 interactive=True,
                                 visible=True
                             )
                             pretrained_D15 = gr.Dropdown(
                                 label="pretrained D",
-                                choices = [f for f in os.listdir('assets/pretrained_v2') if 'D' in f and f.endswith('.pth')],
-                                value= [f for f in os.listdir('assets/pretrained_v2') if 'D' in f and f.endswith('.pth')][0] if len([f for f in os.listdir('assets/pretrained_v2') if 'D' in f and f.endswith('.pth')]) > 0 else '',
+                                choices = pretrained(sr2.value, 'D'),
+                                value= pretrained(sr2.value, 'D')[0] if len(pretrained(sr2.value, 'G')) > 0 else '',
                                 visible=True,
                                 interactive=True
                             )
