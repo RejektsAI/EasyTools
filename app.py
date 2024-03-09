@@ -1,7 +1,8 @@
 from original import *
-from datetime import datetime
 import shutil, glob
+from easyfuncs import download_from_url, CachedModels
 os.makedirs("dataset",exist_ok=True)
+model_library = CachedModels()
 
 with gr.Blocks(title="🔊",theme=gr.themes.Base(primary_hue="rose",neutral_hue="zinc")) as app:
     with gr.Row():
@@ -161,6 +162,24 @@ with gr.Blocks(title="🔊",theme=gr.themes.Base(primary_hue="rose",neutral_hue=
                     inputs=[voice_model, protect0, protect0],
                     outputs=[spk_item, protect0, protect0, file_index2, file_index2],
                     api_name="infer_change_voice",
+                )
+        with gr.TabItem("Download Models"):
+            with gr.Row():
+                url_input = gr.Textbox(label="URL to model", value="",placeholder="https://...", scale=6)
+                name_output = gr.Textbox(label="Save as", value="",placeholder="MyModel",scale=2)
+                url_download = gr.Button(value="Download Model",scale=2)
+                url_download.click(
+                    inputs=[url_input,name_output],
+                    outputs=[url_input],
+                    fn=download_from_url,
+                )
+            with gr.Row():
+                model_browser = gr.Dropdown(choices=list(model_library.models.keys()),label="OR Search Models (Quality UNKNOWN)",scale=5)
+                download_from_browser = gr.Button(value="Get",scale=2)
+                download_from_browser.click(
+                    inputs=[model_browser],
+                    outputs=[model_browser],
+                    fn=lambda model: download_from_url(model_library.models[model],model),
                 )
         with gr.TabItem("Train"):
             with gr.Row():
