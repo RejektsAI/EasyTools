@@ -109,3 +109,27 @@ def download_from_url(url=None, model=None):
         shutil.rmtree("unzips", ignore_errors=True)
         shutil.rmtree("zip", ignore_errors=True)
         return 'Done'
+        
+def speak(audio, text):
+    print(f"({audio}, {text})")
+    current_dir = os.getcwd()
+    os.chdir('./gpt_sovits_demo')
+    process = subprocess.Popen([
+        "python", "./zero.py",
+        "--input_file", audio,
+        "--audio_lang", "English", 
+        "--text", text,
+        "--text_lang", "English"
+    ], stdout=subprocess.PIPE, text=True)
+    
+    for line in process.stdout:
+        line = line.strip()
+        if "All keys matched successfully" in line:
+            continue
+        if line.startswith("(") and line.endswith(")"):
+            path, finished = line[1:-1].split(", ")
+            if finished:
+                os.chdir(current_dir)
+                return path
+    os.chdir(current_dir)
+    return None
