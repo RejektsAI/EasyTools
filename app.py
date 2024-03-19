@@ -1,8 +1,23 @@
 from original import *
 import shutil, glob
+import yt_dlp
 from easyfuncs import download_from_url, CachedModels
 os.makedirs("dataset",exist_ok=True)
 model_library = CachedModels()
+
+def download_audio(url, audio_name):
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+        'outtmpl': f'audios/{audio_name}',
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([url])
+    return
 
 with gr.Blocks(title="🔊",theme=gr.themes.Base(primary_hue="rose",neutral_hue="zinc")) as app:
     with gr.Row():
@@ -163,6 +178,13 @@ with gr.Blocks(title="🔊",theme=gr.themes.Base(primary_hue="rose",neutral_hue=
                     outputs=[spk_item, protect0, protect0, file_index2, file_index2],
                     api_name="infer_change_voice",
                 )
+        with gr.TabItem("Download acapella"):
+            with gr.Row():
+                url = gr.Textbox(label="url to yotube link.")
+                audio_name = gr.Textbox(label="file name.")
+                output_audio2 = gr.Textbox(label="output")
+                dwnl_button = gr.Button("Download")
+                dwnl_button.click(fn=download_audio,inputs=[url,audio_name],outputs=[output_audio2])
         with gr.TabItem("Download Models"):
             with gr.Row():
                 url_input = gr.Textbox(label="URL to model", value="",placeholder="https://...", scale=6)
