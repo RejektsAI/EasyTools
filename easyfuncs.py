@@ -195,6 +195,7 @@ def sr_process(audio1, audio2, choice):
     venv_dir = "audiosr"
 
     def split_audio(input_file, output_folder, chunk_duration=5.12):
+        if os.path.exists(output_folder): shutil.rmtree(output_folder)
         os.makedirs(output_folder, exist_ok=True)
         ffmpeg_command = f"ffmpeg -i {input_file} -f segment -segment_time {chunk_duration} -c:a pcm_s16le {output_folder}/out%03d.wav"
         subprocess.run(ffmpeg_command, shell=True, check=True)
