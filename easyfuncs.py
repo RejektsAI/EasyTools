@@ -1,18 +1,16 @@
 import os, subprocess
 import gradio as gr
-import shutil
+import shutil, time, torch, gc
 from mega import Mega
 from datetime import datetime
 import pandas as pd
-import os, numpy as np
+import os, sys, subprocess,  numpy as np
 from pydub import AudioSegment
 try: 
     from whisperspeech.pipeline import Pipeline as TTS
     whisperspeak_on = True   
 except:
     whisperspeak_on = False
-
-tts_pipe = TTS(t2s_ref='whisperspeech/whisperspeech:t2s-v1.95-small-8lang.model', s2a_ref='whisperspeech/whisperspeech:s2a-v1.95-medium-7lang.model') if whisperspeak_on else None
 
 # Class to handle caching model urls from a spreadsheet
 class CachedModels:
@@ -144,6 +142,7 @@ def speak(audio, text):
 
 def whisperspeak(text, tts_lang, cps=10.5):
     if whisperspeak_on is None: return None
+    if not "tts_pipe" in locals(): tts_pipe = TTS(t2s_ref='whisperspeech/whisperspeech:t2s-v1.95-small-8lang.model', s2a_ref='whisperspeech/whisperspeech:s2a-v1.95-medium-7lang.model')
     from fastprogress.fastprogress import master_bar, progress_bar
     master_bar.update = lambda *args, **kwargs: None
     progress_bar.update = lambda *args, **kwargs: None
@@ -152,9 +151,11 @@ def whisperspeak(text, tts_lang, cps=10.5):
     tts_pipe.generate_to_file(output, text, cps=cps, lang=tts_lang)
     return os.path.abspath(output)
 
-def process(audio,options):
-    if options == "stereo":
-        sample_rate, audio_array = audio
+def stereo_process(audio1,audio2,choice):
+    audio = audio1 if choice == "Input" else audio2
+    print(audio)
+    sample_rate, audio_array = audio
+    if len(audio_array.shape) == 1:
         audio_bytes = audio_array.tobytes()
         segment = AudioSegment(
             data=audio_bytes,
@@ -169,5 +170,73 @@ def process(audio,options):
         left_channel[delay_samples:] = samples[:-delay_samples]
         stereo_samples = np.column_stack((left_channel, right_channel))
         return (sample_rate, stereo_samples.astype(np.int16))
-    elif options == "mono":
+    else:
         return audio
+    
+def sr_process(audio1, audio2, choice):
+    torch.cuda.empty_cache()
+    gc.collect()
+    if "tts_pipe" in locals(): del tts_pipe
+    audio = audio1 if choice == "Input" else audio2
+    sample_rate, audio_array = audio
+    audio_segment = AudioSegment(
+        audio_array.tobytes(),
+        frame_rate=sample_rate,
+        sample_width=audio_array.dtype.itemsize,
+        channels=1 if len(audio_array.shape) == 1 else 2
+    )
+    temp_file = os.path.join('TEMP', f'{choice}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.wav')
+    audio_segment.export(temp_file, format="wav")
+    output_folder = "SR"
+    model_name = "speech"
+    suffix = "_ldm"
+    guidance_scale = 2.7
+    ddim_steps = 50
+    venv_dir = "audiosr"
+
+    def split_audio(input_file, output_folder, chunk_duration=5.12):
+        os.makedirs(output_folder, exist_ok=True)
+        ffmpeg_command = f"ffmpeg -i {input_file} -f segment -segment_time {chunk_duration} -c:a pcm_s16le {output_folder}/out%03d.wav"
+        subprocess.run(ffmpeg_command, shell=True, check=True)
+
+    def create_file_list(output_folder):
+        file_list = os.path.join(output_folder, "file_list.txt")
+        with open(file_list, "w") as f:
+            for filename in sorted(os.listdir(output_folder)):
+                if filename.endswith(".wav"):
+                    f.write(os.path.join(output_folder, filename) + "\n")
+        return file_list
+
+    def run_audiosr(file_list, model_name, suffix, guidance_scale, ddim_steps, output_folder, venv_dir):
+        command = f"{venv_dir}/bin/python -m audiosr --input_file_list {file_list} --model_name {model_name} --suffix {suffix} --guidance_scale {guidance_scale} --ddim_steps {ddim_steps} --save_path {output_folder}"
+        try:
+            subprocess.run(command, shell=True, check=True, stderr=subprocess.PIPE)
+        except subprocess.CalledProcessError as e:
+            print(f"Error running audiosr: {e.stderr.decode()}")
+
+
+    split_audio(temp_file, output_folder)
+    file_list = create_file_list(output_folder)
+    run_audiosr(file_list, model_name, suffix, guidance_scale, ddim_steps, output_folder, venv_dir)
+
+    output_file = None
+    time.sleep(1)
+    processed_chunks = []
+    for root, dirs, files in os.walk(output_folder):
+        for file in sorted(files):
+            if file.startswith("out") and file.endswith(f"{suffix}.wav"):
+                chunk_file = os.path.join(root, file)
+                processed_chunks.append(AudioSegment.from_wav(chunk_file))
+
+    if processed_chunks:
+        merged_audio = sum(processed_chunks)
+        output_file = os.path.join(output_folder, f"{choice}_merged{suffix}.wav")
+        merged_audio.export(output_file, format="wav")
+        
+        display_file = AudioSegment.from_file(output_file)
+        sample_rate = display_file.frame_rate
+        audio_array = np.array(display_file.get_array_of_samples())
+        return (sample_rate, audio_array)
+    else:
+        print(f"Error: Could not find any processed audio chunks in {output_folder}")
+        return None
