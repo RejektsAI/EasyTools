@@ -4,7 +4,8 @@ import shutil
 from mega import Mega
 from datetime import datetime
 import pandas as pd
-import os
+import os, numpy as np
+from pydub import AudioSegment
 try: 
     from whisperspeech.pipeline import Pipeline as TTS
     whisperspeak_on = True   
@@ -150,3 +151,23 @@ def whisperspeak(text, tts_lang, cps=10.5):
     output = f"audios/tts_audio_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
     tts_pipe.generate_to_file(output, text, cps=cps, lang=tts_lang)
     return os.path.abspath(output)
+
+def process(audio,options):
+    if options == "stereo":
+        sample_rate, audio_array = audio
+        audio_bytes = audio_array.tobytes()
+        segment = AudioSegment(
+            data=audio_bytes,
+            sample_width=audio_array.dtype.itemsize,  # 2 bytes for int16
+            frame_rate=sample_rate,  # Use the sample rate from your tuple
+            channels=1  # Adjust if your audio has more channels
+            )
+        samples = np.array(segment.get_array_of_samples())
+        delay_samples = int(segment.frame_rate * (0.6 / 1000.0))
+        left_channel = np.zeros_like(samples)
+        right_channel = samples
+        left_channel[delay_samples:] = samples[:-delay_samples]
+        stereo_samples = np.column_stack((left_channel, right_channel))
+        return (sample_rate, stereo_samples.astype(np.int16))
+    elif options == "mono":
+        return audio
