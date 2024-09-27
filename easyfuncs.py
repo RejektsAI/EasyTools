@@ -2,9 +2,16 @@ import os, subprocess
 import gradio as gr
 import shutil
 from mega import Mega
-
+from datetime import datetime
 import pandas as pd
 import os
+try: 
+    from whisperspeech.pipeline import Pipeline as TTS
+    whisperspeak_on = True   
+except:
+    whisperspeak_on = False
+
+tts_pipe = TTS(t2s_ref='whisperspeech/whisperspeech:t2s-v1.95-small-8lang.model', s2a_ref='whisperspeech/whisperspeech:s2a-v1.95-medium-7lang.model') if whisperspeak_on else None
 
 # Class to handle caching model urls from a spreadsheet
 class CachedModels:
@@ -133,3 +140,13 @@ def speak(audio, text):
                 return path
     os.chdir(current_dir)
     return None
+
+def whisperspeak(text, tts_lang, cps=10.5):
+    if whisperspeak_on is None: return None
+    from fastprogress.fastprogress import master_bar, progress_bar
+    master_bar.update = lambda *args, **kwargs: None
+    progress_bar.update = lambda *args, **kwargs: None
+    
+    output = f"audios/tts_audio_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
+    tts_pipe.generate_to_file(output, text, cps=cps, lang=tts_lang)
+    return os.path.abspath(output)
